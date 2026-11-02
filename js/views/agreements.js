@@ -1,6 +1,6 @@
 // بخش توافقات
 import { h, ICON, uid, fa, norm, debounce, confirmDialog, fmtMoney, modal } from '../util.js';
-import { data, save, remove, on, putFile, getFile, delFile } from '../db.js';
+import { data, save, remove, on, putFile, getFileRec, delFile } from '../db.js';
 import { InkSurface } from '../ink.js';
 import { todayKey, fmtShort, diffDays, relLabel } from '../jalali.js';
 import { dateField, remindField, personField, personName, segmented } from '../pickers.js';
@@ -103,21 +103,32 @@ function agreementDetail(root, a, { onDelete }) {
   const renderFiles = async () => {
     files.innerHTML = '';
     for (const fid of a.files) {
-      const blob = await getFile(fid);
-      if (!blob) continue;
-      const url = URL.createObjectURL(blob); urls.push(url);
-      files.append(h('div', { class: 'attach' },
-        h('img', { src: url, alt: 'پیوست', onclick: () => viewImage(url) }),
-        h('button', { class: 'icon-btn tiny', html: ICON.close, title: 'حذف', onclick: async () => {
-          if (!(await confirmDialog('این عکس حذف شود؟', 'حذف', true))) return;
-          a.files = a.files.filter((x) => x !== fid); delFile(fid); save('agreements', a); renderFiles();
-        } })));
+      const rec = await getFileRec(fid);
+      if (!rec?.blob) continue;
+      const url = URL.createObjectURL(rec.blob); urls.push(url);
+      const isImg = (rec.blob.type || '').startsWith('image/');
+      const name = rec.name || (isImg ? 'عکس' : 'فایل');
+      const del = h('button', { class: 'icon-btn tiny', html: ICON.close, title: 'حذف', onclick: async (e) => {
+        e.stopPropagation(); e.preventDefault();
+        if (!(await confirmDialog(`«${name}» حذف شود؟`, 'حذف', true))) return;
+        a.files = a.files.filter((x) => x !== fid); delFile(fid); save('agreements', a); renderFiles();
+      } });
+      if (isImg) files.append(h('div', { class: 'attach' }, h('img', { src: url, alt: name, onclick: () => viewImage(url) }), del));
+      else files.append(h('a', { class: 'attach file', href: url, download: name, title: 'باز کردن / ذخیره' },
+        h('span', { class: 'file-ext' }, fileExt(name)), h('small', { class: 'file-name' }, name), h('small', { class: 'muted' }, fmtSize(rec.blob.size)), del));
     }
-    const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, onchange: async (e) => {
-      for (const f of e.target.files) { const id = uid(); await putFile(id, await compressImage(f)); a.files.push(id); }
+    const pick = (accept) => h('input', { type: 'file', accept, multiple: true, hidden: true, onchange: async (e) => {
+      for (const f of e.target.files) {
+        const id = uid();
+        const isImg = f.type.startsWith('image/') && !/svg|gif/.test(f.type);
+        await putFile(id, isImg ? await compressImage(f) : f, f.name);
+        a.files.push(id);
+      }
       save('agreements', a); renderFiles();
     } });
-    files.append(h('label', { class: 'attach add' }, input, h('span', { html: ICON.camera }), h('small', null, 'افزودن عکس')));
+    files.append(
+      h('label', { class: 'attach add' }, pick('image/*'), h('span', { html: ICON.camera }), h('small', null, 'افزودن عکس')),
+      h('label', { class: 'attach add' }, pick('*/*'), h('span', { html: ICON.clip }), h('small', null, 'پیوست فایل')));
   };
   renderFiles();
 
@@ -130,8 +141,7 @@ function agreementDetail(root, a, { onDelete }) {
     head,
     h('div', { class: 'card' },
       h('div', { class: 'form-grid' },
-        h('div', null, h('label', null, 'طرف توافق'), h('div', { class: 'row gap' }, personField(a.personId, (v) => { a.personId = v; save('agreements', a); }),
-          h('button', { class: 'icon-btn', title: 'رفتن به کارت شخص', html: ICON.link, onclick: () => { if (a.personId) location.hash = '#/people/' + a.personId; } }))),
+        h('div', null, h('label', null, 'طرف توافق'), personField(a.personId, (v) => { a.personId = v; save('agreements', a); })),
         h('div', null, h('label', null, 'تاریخ توافق'), dateField(a.date, (v) => { a.date = v; save('agreements', a); })),
         h('div', null, h('label', null, 'مبلغ'), h('div', { class: 'row gap' }, amount, unit)),
         h('div', null, h('label', null, 'مهلت انجام'), dateField(a.deadline, (v) => { a.deadline = v; save('agreements', a); }, { placeholder: 'بدون مهلت' })),
@@ -139,7 +149,7 @@ function agreementDetail(root, a, { onDelete }) {
         h('div', null, h('label', null, 'وضعیت'), segmented(Object.entries(STATUS).map(([value, s]) => ({ value, label: s.label, color: s.color })), a.status, (v) => { a.status = v; save('agreements', a); })),
       )),
     h('div', { class: 'card' }, h('h4', null, 'شرح توافق'), desc, h('div', { class: 'small muted', style: { margin: '8px 0 4px' } }, 'دست‌نویس'), inkHost),
-    h('div', { class: 'card' }, h('h4', null, 'پیوست‌ها (عکس قرارداد، رسید، …)'), files),
+    h('div', { class: 'card' }, h('h4', null, 'پیوست‌ها (عکس، PDF، فایل قرارداد، رسید، …)'), files),
   );
   root.append(body);
   const surf = new InkSurface(inkHost, { doc: a.ink, logicalWidth: 800, lineGap: 36, bg: 'lines', onChange: () => persist() });
@@ -160,3 +170,6 @@ async function compressImage(file, max = 1800) {
     return await new Promise((res) => c.toBlob((b) => res(b || file), 'image/jpeg', 0.85));
   } catch { return file; }
 }
+
+function fileExt(name) { const m = /\.([a-z0-9]{1,5})$/i.exec(name || ''); return m ? m[1].toUpperCase() : 'فایل'; }
+function fmtSize(b) { return b < 1024 * 1024 ? fa(Math.max(1, Math.round(b / 1024))) + ' کیلوبایت' : fa((b / 1048576).toFixed(1)) + ' مگابایت'; }

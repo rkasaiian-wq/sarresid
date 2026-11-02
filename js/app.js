@@ -149,7 +149,11 @@ async function boot() {
   // تغییر روز در نیمه‌شب
   let day = todayKey();
   setInterval(() => { if (todayKey() !== day) { day = todayKey(); if (location.hash.startsWith('#/today') || location.hash.startsWith('#/tasks')) route(); } }, 60000);
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    const hadCtrl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then((r) => r.update()).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtrl) toast('نسخه‌ی جدید نصب شد؛ برای استفاده، اپ را یک بار ببندید و باز کنید', 6000); });
+  }
   document.addEventListener('pointerdown', tryLock, { once: true });
 }
 function tryLock() {

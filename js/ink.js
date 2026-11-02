@@ -237,7 +237,7 @@ export class InkSurface {
     this.wrap.append(this.content, this.base, this.live, this.selMenu);
     host.append(this.wrap);
     this.bctx = this.base.getContext('2d');
-    this.lctx = this.live.getContext('2d', { desynchronized: true }) || this.live.getContext('2d');
+    this.lctx = this.live.getContext('2d');
 
     this._down = (e) => this.onDown(e);
     this._move = (e) => this.onMove(e);

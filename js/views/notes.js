@@ -36,7 +36,11 @@ export function renderNotes(main, [id]) {
       const tbl = (n.doc?.objects || []).find((o) => o.type === 'table');
       if (!top.length && !txt && tbl) prev.append(h('table', { class: 'nc-table' }, tbl.rows.slice(0, 5).map((r) => h('tr', null, r.slice(0, 4).map((c) => h('td', null, c))))));
       const objs = (n.doc?.objects || []);
-      grid.append(h('a', { class: 'note-card', href: '#/notes/' + n.id }, prev,
+      const delBtn = h('button', { class: 'icon-btn tiny nc-del', title: 'حذف یادداشت', html: ICON.trash, onclick: async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (await confirmDialog(`یادداشت «${n.title || 'بدون عنوان'}» حذف شود؟`, 'حذف', true)) remove('notes', n.id);
+      } });
+      grid.append(h('a', { class: 'note-card', href: '#/notes/' + n.id }, prev, delBtn,
         h('div', { class: 'nc-info' },
           h('strong', null, n.title || 'بدون عنوان'),
           h('small', { class: 'muted' }, [relLabel(keyOf(new Date(n.updatedAt))), n.folder,

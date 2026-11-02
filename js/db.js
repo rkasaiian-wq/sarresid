@@ -70,7 +70,8 @@ export function saveSettings(patch) {
 }
 
 // فایل‌ها (عکس پیوست‌ها)
-export const putFile = (id, blob) => idb.put('files', { id, blob });
+export const putFile = (id, blob, name) => idb.put('files', { id, blob, name });
+export const getFileRec = (id) => idb.get('files', id);
 export const getFile = async (id) => (await idb.get('files', id))?.blob;
 export const delFile = (id) => idb.del('files', id);
 
@@ -82,7 +83,7 @@ export async function exportAll() {
   for (const s of CACHED) out[s] = [...data[s].values()];
   const files = await idb.all('files');
   out.files = [];
-  for (const f of files) out.files.push({ id: f.id, data: await blobToDataURL(f.blob) });
+  for (const f of files) out.files.push({ id: f.id, name: f.name, data: await blobToDataURL(f.blob) });
   out.settings = { ...settings, _persisted: undefined, pinHash: undefined, pinSalt: undefined };
   return new Blob([JSON.stringify(out)], { type: 'application/json' });
 }
@@ -95,7 +96,7 @@ export async function importAll(json) {
     for (const row of obj[s] || []) await idb.put(s, row);
   }
   await idb.clear('files');
-  for (const f of obj.files || []) await idb.put('files', { id: f.id, blob: await dataURLToBlob(f.data) });
+  for (const f of obj.files || []) await idb.put('files', { id: f.id, name: f.name, blob: await dataURLToBlob(f.data) });
   if (obj.settings) {
     const keep = { pinHash: settings.pinHash, pinSalt: settings.pinSalt };
     await idb.put('meta', { ...obj.settings, ...keep, id: 'settings' });

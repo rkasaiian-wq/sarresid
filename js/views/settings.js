@@ -6,7 +6,7 @@ import { fmtNum, todayKey, fmtDateTime } from '../jalali.js';
 import { applyTheme, hashPin, askPin } from '../lock.js';
 import { segmented } from '../pickers.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 
 export function renderSettings(main) {
   const card = (title, ...kids) => h('div', { class: 'card' }, h('h4', null, title), ...kids);
