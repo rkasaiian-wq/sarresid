@@ -79,30 +79,38 @@ export function addTaskBar({ due = null, personId = null, placeholder = 'کار 
 }
 
 // پنجره‌ی نوشتن کار با قلم
-export function inkPad(strokes, { height = 130, width = 700 } = {}) {
+export function inkPad(strokes, { height = 130, width = 700, gap = 44, cls = '' } = {}) {
   const doc = { strokes: strokes ? strokes.map((s) => ({ ...s, p: s.p.slice() })) : [], objects: [] };
-  const host = h('div', { class: 'ink-pad', style: { height: height + 'px' } });
+  const host = h('div', { class: 'ink-pad ' + cls, style: { height: typeof height === 'number' ? height + 'px' : height } });
   let surf;
   const ctrl = h('div', { class: 'row gap pad-ctrl' },
     h('button', { class: 'btn small', onclick: () => surf.undo() }, 'برگرداندن'),
     h('button', { class: 'btn small', onclick: () => surf.clearAll() }, 'پاک کردن'));
   const el = h('div', { class: 'ink-pad-box' }, host, ctrl);
-  requestAnimationFrame(() => { surf = new InkSurface(host, { doc, logicalWidth: width, bg: 'lines', lineGap: 44, scroll: false, forceTool: 'pen' }); });
-  return { el, doc, destroy: () => surf?.destroy() };
+  requestAnimationFrame(() => { surf = new InkSurface(host, { doc, logicalWidth: width, bg: 'lines', lineGap: gap, scroll: false, forceTool: 'pen' }); });
+  return { el, doc, destroy: () => surf?.destroy(), clear: () => { doc.strokes.length = 0; surf?.changed(); surf?.undoStack.splice(0); } };
 }
 
 export function handwriteTask({ due = null, personId = null } = {}) {
-  const pad = inkPad(null);
+  const pad = inkPad(null, { height: 'max(150px, calc(100dvh - 170px))', width: 760, gap: 64, cls: 'big' });
+  let n = 0;
+  const counter = h('span', { class: 'muted small' });
+  const store = () => {
+    if (!pad.doc.strokes.length) return false;
+    save('tasks', { id: uid(), title: '', ink: pad.doc.strokes.slice(), due, personId, pri: 3, done: false });
+    n++; counter.textContent = fa(n) + ' کار ذخیره شد';
+    return true;
+  };
   const m = modal({
-    title: 'کار جدید با قلم', cls: 'modal-wide', body: h('div', null, h('p', { class: 'muted small' }, 'کار را با S Pen بنویسید. دکمه‌ی کنار قلم = پاک‌کن.'), pad.el),
+    title: 'کار جدید با قلم', cls: 'modal-wide modal-hw', body: pad.el,
     actions: [
-      { label: 'انصراف' },
-      { label: 'ذخیره', cls: 'primary', onclick: () => {
-        if (pad.doc.strokes.length) save('tasks', { id: uid(), title: '', ink: pad.doc.strokes, due, personId, pri: 3, done: false });
-      } },
+      { label: 'بستن' },
+      { label: 'ذخیره و کار بعدی', onclick: () => { if (store()) pad.clear(); return false; } },
+      { label: 'ذخیره', cls: 'primary', onclick: () => { store(); } },
     ],
     onClose: () => pad.destroy(),
   });
+  m.el.querySelector('.pad-ctrl').prepend(counter);
   return m;
 }
 

@@ -19,6 +19,13 @@ export const getActive = () => active;
 export const onActive = (f) => (activeSubs.add(f), () => activeSubs.delete(f));
 function setActive(s) { if (active !== s) { active = s; activeSubs.forEach((f) => f(s)); } }
 
+// دکمه‌ی کنار قلم: Samsung/Chrome آن را به شکل‌های مختلف گزارش می‌کند
+let barrelAt = 0;
+export const isBarrel = (e) => e.pointerType === 'pen' && (((e.buttons & 2) || (e.buttons & 32)) || e.button === 2 || e.button === 5);
+window.addEventListener('pointermove', (e) => { if (isBarrel(e)) barrelAt = performance.now(); }, { capture: true, passive: true });
+window.addEventListener('pointerdown', (e) => { if (isBarrel(e)) barrelAt = performance.now(); }, { capture: true, passive: true });
+const barrelRecently = () => performance.now() - barrelAt < 250;
+
 export const inkColor = () => getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#1d2433';
 
 // ---------- هندسه و رسم خط ----------
@@ -234,7 +241,8 @@ export class InkSurface {
     this.base = h('canvas', { class: 'ink-base' });
     this.live = h('canvas', { class: 'ink-live' });
     this.selMenu = h('div', { class: 'ink-selmenu', hidden: true });
-    this.wrap.append(this.content, this.base, this.live, this.selMenu);
+    this.sbar = h('div', { class: 'ink-sbar', hidden: true });
+    this.wrap.append(this.content, this.base, this.live, this.selMenu, this.sbar);
     host.append(this.wrap);
     this.bctx = this.base.getContext('2d');
     this.lctx = this.live.getContext('2d');
@@ -296,13 +304,23 @@ export class InkSurface {
     for (const el of this.objLayer.children) b = Math.max(b, el.offsetTop + el.offsetHeight);
     return (this._bottom = b);
   }
-  maxScroll() { return this.opts.scroll ? Math.max(0, this.contentBottom() - this.viewH * 0.45) : 0; }
-  updateHeight() { this.content.style.height = Math.ceil(this.maxScroll() + this.viewH + this.opts.lineGap * 2) + 'px'; }
+  maxScroll() { return this.opts.scroll ? Math.max(0, this.viewH * ((this.opts.minPages || 1) - 1), this.contentBottom() - this.viewH * 0.45) : 0; }
+  setLineGap(g) { this.opts.lineGap = g; this.content.style.setProperty('--gap', g + 'px'); this.updateHeight(); }
+  updateBar() {
+    const ms = this.maxScroll();
+    if (!ms) { this.sbar.hidden = true; return; }
+    const tot = ms + this.viewH;
+    this.sbar.hidden = false;
+    this.sbar.style.height = Math.max(24, (this.viewH / tot) * this.ch) + 'px';
+    this.sbar.style.top = (this.sy / tot) * this.ch + 'px';
+  }
+  updateHeight() { this.content.style.height = Math.ceil(this.maxScroll() + this.viewH + this.opts.lineGap * 2) + 'px'; if (this.sbar) this.updateBar(); }
   setScroll(y, force) {
     const ny = Math.max(0, Math.min(this.maxScroll(), y));
     if (ny === this.sy && !force) return;
     this.sy = ny;
     this.content.style.transform = `translate3d(0, ${-ny * this.s}px, 0) scale(${this.s})`;
+    this.updateBar();
     this.redraw();
     if (this.sel) this.showSel();
   }
@@ -461,7 +479,7 @@ export class InkSurface {
     }
     if (this.sel) this.clearSel();
     const t = this.opts.forceTool || tool.name;
-    const barrel = type === 'pen' && ((e.buttons & 32) || (e.buttons & 2) || e.button === 5 || e.button === 2);
+    const barrel = isBarrel(e) || (type === 'pen' && barrelRecently());
     if (barrel || t === 'eraser') {
       this.ptr = { ...base, mode: 'erase', last: pt, snap: false, removed: 0 };
       this.eraseSeg(pt, pt);
@@ -500,6 +518,13 @@ export class InkSurface {
         break;
       }
       case 'draw': {
+        if (P.type === 'pen' && isBarrel(e) && !this.opts.forceTool) {
+          // دکمه وسط نوشتن فشرده شد → پاک‌کن
+          clearTimeout(this._hold);
+          this.clearLive();
+          Object.assign(P, { mode: 'erase', last: this.toLogical(e), snap: false, removed: 0 });
+          break;
+        }
         if (P.shaped) break;
         const s = P.s;
         for (const ev of list) {

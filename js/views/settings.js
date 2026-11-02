@@ -1,12 +1,12 @@
 // تنظیمات، پشتیبان‌گیری و رمز
 import { h, ICON, toast, confirmDialog, fa, modal } from '../util.js';
 import { settings, saveSettings, exportAll, importAll, data } from '../db.js';
-import { tool, setTool } from '../ink.js';
+import { tool, setTool, isBarrel } from '../ink.js';
 import { fmtNum, todayKey, fmtDateTime } from '../jalali.js';
 import { applyTheme, hashPin, askPin } from '../lock.js';
 import { segmented } from '../pickers.js';
 
-export const VERSION = '1.0.1';
+export const VERSION = '1.0.2';
 
 export function renderSettings(main) {
   const card = (title, ...kids) => h('div', { class: 'card' }, h('h4', null, title), ...kids);
@@ -54,7 +54,8 @@ export function renderSettings(main) {
           row('کاغذ پیش‌فرض یادداشت', segmented([{ value: 'lines', label: 'خط‌دار' }, { value: 'grid', label: 'شطرنجی' }, { value: 'dots', label: 'نقطه‌ای' }, { value: 'blank', label: 'سفید' }], settings.noteBg || 'lines', (v) => saveSettings({ noteBg: v })))),
         card('قلم',
           row('نوشتن با انگشت', toggle(tool.finger, (v) => setTool({ finger: v })), 'خاموش = فقط S Pen می‌نویسد و انگشت صفحه را جابه‌جا می‌کند (پیشنهادی)'),
-          h('p', { class: 'muted small' }, 'دکمه‌ی کنار S Pen را نگه دارید تا پاک‌کن شود. برای صاف شدن شکل، بعد از کشیدن، قلم را لحظه‌ای نگه دارید.')),
+          h('p', { class: 'muted small' }, 'دکمه‌ی کنار S Pen را نگه دارید تا پاک‌کن شود. برای صاف شدن شکل، بعد از کشیدن، قلم را لحظه‌ای نگه دارید.'),
+          penTest()),
         card('امنیت',
           row('قفل با رمز', settings.pinHash
             ? h('div', { class: 'row gap' }, h('button', { class: 'btn small', onclick: setPin }, 'تغییر رمز'), h('button', { class: 'btn small danger ghost', onclick: async () => { if (await confirmDialog('رمز برداشته شود؟', 'بله', true)) { saveSettings({ pinHash: null, pinSalt: null }); render(); } } }, 'برداشتن'))
@@ -78,4 +79,26 @@ export function renderSettings(main) {
   render();
   main.append(root);
   return () => {};
+}
+
+// آزمایش قلم: نشان می‌دهد Chrome دکمه‌ی قلم را چطور گزارش می‌کند
+function penTest() {
+  const out = h('div', { class: 'pen-test-out' }, 'با S Pen اینجا را لمس کنید؛ یک بار بدون دکمه و یک بار با دکمه‌ی فشرده.');
+  const seen = new Set();
+  let hit = false;
+  const show = (e) => {
+    if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+    e.preventDefault();
+    const key = `${e.type.replace('pointer', '')} · نوع=${e.pointerType} · button=${e.button} · buttons=${e.buttons}`;
+    seen.add(key);
+    if (e.type === 'pointerdown') hit = false;
+    if (isBarrel(e)) hit = true;
+    const ok = hit;
+    out.innerHTML = '';
+    out.append(h('div', { class: ok ? 'badge ok' : 'badge' }, ok ? 'دکمه‌ی قلم تشخیص داده شد ✓ (پاک‌کن)' : 'قلم معمولی'),
+      h('div', { class: 'ltr small muted' }, `pressure=${(e.pressure || 0).toFixed(2)}`),
+      h('div', { class: 'ltr small' }, [...seen].slice(-6).map((k) => h('div', null, k))));
+  };
+  const pad = h('div', { class: 'pen-test', onpointerdown: show, onpointermove: show, onpointerup: show, oncontextmenu: (e) => e.preventDefault() }, out);
+  return h('div', null, h('div', { class: 'small', style: { margin: '8px 0 4px', fontWeight: 600 } }, 'آزمایش دکمه‌ی قلم'), pad);
 }

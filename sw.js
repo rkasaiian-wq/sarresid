@@ -1,5 +1,5 @@
 // کش آفلاین اپ
-const CACHE = 'sarresid-v2';
+const CACHE = 'sarresid-v3';
 const ASSETS = [
   './',
   'css/app.css',

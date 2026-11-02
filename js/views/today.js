@@ -1,10 +1,10 @@
 // صفحه‌ی روزانه: کارهای روز (راست) + صفحه‌ی دست‌نویس (چپ)
 import { h, ICON, fa, debounce } from '../util.js';
-import { data, save, on } from '../db.js';
+import { data, save, on, settings, saveSettings } from '../db.js';
 import { todayKey, addDays, fmtLong, jOf, MONTHS, diffDays, relLabel } from '../jalali.js';
 import { InkSurface } from '../ink.js';
 import { taskList, fillTaskList, addTaskBar, sortTasks } from '../tasks-common.js';
-import { pickDate, personName } from '../pickers.js';
+import { pickDate, personName, segmented } from '../pickers.js';
 
 export function renderToday(main, [key]) {
   const today = todayKey();
@@ -57,12 +57,14 @@ export function renderToday(main, [key]) {
   const persist = debounce(() => { if (day.ink.strokes.length || data.days.has(key)) save('days', day, { silent: true }); }, 500);
   const inkHost = h('div', { class: 'ink-host' });
   const left = h('section', { class: 'pane day-ink paper' },
-    h('div', { class: 'paper-head' }, h('span', null, 'یادداشت‌های روز'), h('small', { class: 'muted' }, diffDays(today, key) === 0 ? '' : relLabel(key))),
+    h('div', { class: 'paper-head' }, h('span', null, 'یادداشت‌های روز', h('small', { class: 'muted' }, diffDays(today, key) === 0 ? '' : ' · ' + relLabel(key))),
+      h('span', { class: 'row gap' }, h('small', { class: 'muted' }, 'خطوط:'),
+        segmented([{ value: 19, label: 'ریز' }, { value: 27, label: 'متوسط' }, { value: 38, label: 'درشت' }], settings.dayGap || 19, (v) => { saveSettings({ dayGap: v }); surf.setLineGap(v); }, 'mini'))),
     inkHost);
   const root = h('div', { class: 'view today' }, right, left);
   main.append(root);
   const surf = new InkSurface(inkHost, {
-    doc: day.ink, logicalWidth: 640, lineGap: 38, bg: 'lines',
+    doc: day.ink, logicalWidth: 640, lineGap: settings.dayGap || 19, bg: 'lines', minPages: 3,
     onChange: persist,
     onSwipe: (dir) => go(addDays(key, dir === 'right' ? 1 : -1)),
   });
